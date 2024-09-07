@@ -1,0 +1,2 @@
+[app.SharkPoolUI]
+command = "python /home/whaleshark/Documents/ergo/miner-view/run.py"

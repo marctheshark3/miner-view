@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  sharkpool-monitor:
+    build: .
+    ports:
+      - "7681:7681"
+    command: ttyd -p 7681 python run.py
+    volumes:
+      - ./:/app
+    environment:
+      - PYTHONUNBUFFERED=1
