@@ -14,6 +14,7 @@ class ApiReader:
         cfg = compose(config_name='conf')
 
         self.mc_api = cfg.default_values.miningcore_api
+        self.sigscore_api = cfg.default_values.sigscore_api
 
     def get_api_data(self, api_url):
         try:
