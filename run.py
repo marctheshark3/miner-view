@@ -123,6 +123,10 @@ class DashboardWidget(Static):
             table.add_row("Your Hashrate", "No data")
             table.add_row("Active Workers", "No data")
             table.add_row("Last Updated", "Never")
+
+        if self.payment_data:
+            for key in self.payment_data.keys():
+                table.add_row(key, self.payment_data[key])
         
         return table
 
@@ -166,11 +170,19 @@ class DashboardWidget(Static):
         return table
 
     def get_connections_info(self) -> Table:
+        reader = ApiReader('../conf')
+        miner_data = reader.get_live_miner_data()
         table = Table(show_header=False, expand=True, box=None)
         table.add_column("Key", style="cyan")
         table.add_column("Value", style="bold magenta")
         table.add_row("POOL URL", '65.108.57.232')
         table.add_row("POOL PORT", '3052')
+
+        for miner in miner_data:
+            addr = miner['miner']
+            addr = 'Miner: {}...{}'.format(addr[:3], addr[-3:])
+            hashrate = '{} Gh/s'.format(miner['hashrate'] / 1e6)
+            table.add_row(addr, hashrate)
         return table
 
     def get_block_info(self) -> Table:
@@ -215,6 +227,12 @@ class MinerInputWidget(Static):
     @on(Input.Submitted)
     def on_input_submitted(self, event: Input.Submitted):
         self.fetch_miner_stats(event.value)
+        self.fetch_miner_payments(event.value)
+
+    def fetch_miner_payments(self, address):
+        reader = ApiReader('../conf')
+        payment_data = reader.get_miner_payment_stats()
+        return payment_data
 
     def fetch_miner_stats(self, address):
         if not address:
@@ -246,7 +264,7 @@ class MinerInputWidget(Static):
                 }
                 
                 # Update the dashboard and the ShareExplorerWidget
-                self.app.update_dashboard_miner_info(latest_miner_stats)
+                # self.app.update_dashboard_miner_info(latest_miner_stats)
                 self.query_one("#miner_stats").update(f"Stats updated for miner: {address}")
                 
             else:
@@ -256,9 +274,9 @@ class MinerInputWidget(Static):
         except Exception as e:
             self.query_one("#miner_stats").update(f"Error fetching miner stats: {str(e)}")
             latest_miner_stats = None
-
+        payment_data = self.fetch_miner_payments(address)
         # Update the share explorer widget based on the latest miner stats
-        self.app.update_dashboard_miner_info(latest_miner_stats)
+        self.app.update_dashboard_miner_info(latest_miner_stats, payment_data)
 
 
 class SharkPoolCyberpunkMonitor(App):
@@ -342,12 +360,15 @@ class SharkPoolCyberpunkMonitor(App):
         if dashboard:
             dashboard.refresh(layout=True)
 
-    def update_dashboard_miner_info(self, miner_stats):
+    def update_dashboard_miner_info(self, miner_stats, payment_data):
         dashboard = self.query_one(DashboardWidget)
-        if dashboard and miner_stats:
+        if dashboard and miner_stats and payment_data:
             dashboard.miner_stats = miner_stats
+            dashboard.payment_data = payment_data
         elif dashboard:
             dashboard.miner_stats = {}
+            dashboard.payment_data = {}
+            
 
 
 if __name__ == "__main__":

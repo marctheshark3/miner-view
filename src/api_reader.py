@@ -50,3 +50,27 @@ class ApiReader:
         url = '{}/{}'.format(self.mc_api, 'blocks')
         blocks = self.get_api_data(url)
         return blocks
+
+    def get_my_blocks(self, address):
+        url = '{}/blocks/{}'.format(self.mc_api, address)
+        blocks = self.get_api_data(url)
+        return blocks
+
+    def get_miner_payment_stats(self, address):
+        url = '{}/minerstats/{}'.format(self.sigscore_api, address)
+        return self.get_api_data(url)
+
+    def get_live_miner_data(self):
+        url = '{}/{}'.format(self.sigscore_api, 'live')
+        return self.get_api_data(url)
+
+    def get_my_live_miner_data(self, address):
+        url = '{}/live/{}'.format(self.sigscore_api, address)
+        return self.get_api_data(url)
+
+    def get_miner_samples(self, address):
+        url = '{}/samples/{}'.format(self.sigscore_api, address)
+        return self.get_api_data(url)
+
+        
+
