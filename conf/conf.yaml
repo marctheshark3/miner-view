@@ -1,4 +1,4 @@
 default_values:
     old_api: 'http://15.204.211.130:4000/api/pools/ErgoSigmanauts'
-    miningcore_api: 'http://37.27.198.175:8000/miningcore'
-    sigscore_api: 'http://37.27.198.175:8000/sigscore'
+    miningcore_api: 'http://37.27.198.175:8000'
+    sigscore_api: 'http://37.27.198.175:8000'

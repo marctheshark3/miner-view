@@ -17,6 +17,7 @@ import random
 import asyncio
 import numpy as np
 from src.api_reader import ApiReader
+from src.format_date import format_date
 
 SHARK_ASCII = """
 [bold cyan]         ,
@@ -92,18 +93,24 @@ class DashboardWidget(Static):
         yield Container(
             Static(Panel(self.get_pool_info(), title="[bold magenta]Pool Stats[/]", border_style="cyan", box=box.HEAVY)),
             Static(Panel(self.get_network_info(), title="[bold yellow]Blockchain[/]", border_style="magenta", box=box.HEAVY)),
-            Static(Panel(self.get_connections_info(), title="[bold cyan]Connections[/]", border_style="yellow", box=box.HEAVY)),
+            
             Static(Panel(self.get_block_info(), title="[bold green]Latest Block[/]", border_style="green", box=box.HEAVY)),
+            Static(Panel(self.get_connections_info(), title="[bold cyan]Connections[/]", border_style="yellow", box=box.HEAVY)),
             Static(Panel(self.get_performance_info(), title="[bold blue]Pool Performance[/]", border_style="blue", box=box.HEAVY)),
             Static(Panel(self.get_miner_info(), title="[bold red]Your Miner[/]", border_style="red", box=box.HEAVY), id="miner_info_panel"),
             id="dashboard-container",
             classes="dashboard-container"
         )
 
-    def watch_miner_stats(self, old_stats, new_stats):
-        if new_stats != old_stats:
-            miner_panel = self.query_one("#miner_info_panel")
-            miner_panel.update(Panel(self.get_miner_info(), title="[bold red]Your Miner[/]", border_style="red", box=box.HEAVY))
+    def on_mount(self) -> None:
+        self.set_interval(10, self.refresh_data)
+
+    def refresh_data(self) -> None:
+        self.refresh(layout=True)
+
+    def update_miner_info(self, miner_stats: dict) -> None:
+        self.miner_stats = miner_stats
+        self.refresh(layout=True)
 
     def get_miner_info(self) -> Table:
         table = Table(show_header=False, expand=True, box=None)
@@ -111,37 +118,35 @@ class DashboardWidget(Static):
         table.add_column("Value", style="bold green")
         
         if self.miner_stats:
-            table.add_row("Your Hashrate", f"{self.miner_stats['total_hashrate'] / 1e6:,.2f} Gh/s")
-            try:
-                table.add_row("Last Updated", self.miner_stats['timestamp'].strftime('%Y-%m-%d %H:%M:%S'))
-            except Exception:
-                table.add_row("Last Updated", str(self.miner_stats['timestamp']))
-            table.add_row("Active Workers", str(self.miner_stats['n_workers']))
-            for worker in self.miner_stats['workers']:
-                table.add_row("Worker:", worker)
+            table.add_row("Your Hashrate", f"{self.miner_stats.get('current_hashrate', 0) / 1e9:,.2f} Gh/s")
+            table.add_row("Shares/Second", f"{self.miner_stats.get('shares_per_second', 0):,.3f}")
+            table.add_row("Active Workers", str(self.miner_stats.get('worker_count', 'N/A')))
+            
+            if self.miner_stats.get('last_block_found'):
+                date = format_date(self.miner_stats['last_block_found']['timestamp'])
+                table.add_row("Last Block", f"{date}")# (Height: {self.miner_stats['last_block_found']['block_height']})")
+                
+            table.add_row("Balance", f"{self.miner_stats.get('balance', 0):,.2f} ERG")
+            if self.miner_stats.get('last_payment'):
+                date = format_date(self.miner_stats['last_payment']['date'])
+                table.add_row("Last Payment", f"{self.miner_stats['last_payment']['amount']:,.2f} ERG on {date}")
         else:
             table.add_row("Your Hashrate", "No data")
             table.add_row("Active Workers", "No data")
-            table.add_row("Last Updated", "Never")
-
-        if self.payment_data:
-            for key in self.payment_data.keys():
-                table.add_row(key, self.payment_data[key])
         
         return table
 
-    def on_mount(self):
-        self.set_interval(10, self.refresh_data)
-
-    def refresh_data(self):
-        self.refresh(layout=True)
+    def watch_miner_stats(self, old_stats: dict, new_stats: dict) -> None:
+        """React to changes in miner_stats."""
+        if old_stats != new_stats:
+            self.query_one("#miner_info_panel").update(Panel(self.get_miner_info(), title="[bold red]Your Miner[/]", border_style="red", box=box.HEAVY))
 
     def get_pool_info(self) -> Table:
         reader = ApiReader('../conf')
         pool_data = reader.get_pool_stats()
 
-        p_hash = str(round(pool_data['poolhashrate'] / 1e6, 2))
-        n_miners = str(pool_data['connectedminers'])
+        p_hash = str(round(pool_data.get('poolhashrate', 0) / 1e9, 2))
+        n_miners = str(pool_data.get('connectedminers', 'N/A'))
 
         table = Table(show_header=False, expand=True, box=None)
         table.add_column("Key", style="cyan")
@@ -177,12 +182,15 @@ class DashboardWidget(Static):
         table.add_column("Value", style="bold magenta")
         table.add_row("POOL URL", '65.108.57.232')
         table.add_row("POOL PORT", '3052')
-
+        counter = 5
         for miner in miner_data:
-            addr = miner['miner']
+            addr = miner['address']
             addr = 'Miner: {}...{}'.format(addr[:3], addr[-3:])
-            hashrate = '{} Gh/s'.format(miner['hashrate'] / 1e6)
+            hashrate = '{} Gh/s'.format(round(miner['hashrate'] / 1e9, 2))
             table.add_row(addr, hashrate)
+            counter -= 1
+            if counter < 0:
+                break
         return table
 
     def get_block_info(self) -> Table:
@@ -194,7 +202,7 @@ class DashboardWidget(Static):
         table.add_column("Value", style="bold green")
         table.add_row("Height", str(pool_data['blockheight']))
         table.add_row("Difficulty", str(round(pool_data['networkdifficulty'] / 1e15, 3)) + ' P')
-        table.add_row("Last Found", pool_data['lastnetworkblocktime'])
+        table.add_row("Last Found", format_date(pool_data['lastnetworkblocktime']))
         return table
 
     def get_performance_info(self) -> Table:
@@ -204,7 +212,7 @@ class DashboardWidget(Static):
         table = Table(show_header=False, expand=True, box=None)
         table.add_column("Key", style="cyan")
         table.add_column("Value", style="bold blue")
-        table.add_row("Blocks Found (24h)", str(len(block_data)))
+        table.add_row("Blocks Found", str(len(block_data)))
         table.add_row("Pool Fee", "1%")
         table.add_row("Payment Threshold", "1 ERG")
         return table
@@ -221,62 +229,37 @@ class MinerInputWidget(Static):
             Static(id="miner_stats", expand=True)
         )
 
-    def on_mount(self):
+    def on_mount(self) -> None:
         self.query_one("#miner_address").focus()
 
     @on(Input.Submitted)
-    def on_input_submitted(self, event: Input.Submitted):
+    def on_input_submitted(self, event: Input.Submitted) -> None:
         self.fetch_miner_stats(event.value)
-        self.fetch_miner_payments(event.value)
 
-    def fetch_miner_payments(self, address):
-        reader = ApiReader('../conf')
-        payment_data = reader.get_miner_payment_stats()
-        return payment_data
-
-    def fetch_miner_stats(self, address):
+    def fetch_miner_stats(self, address: str) -> None:
+        
         if not address:
             self.query_one("#miner_stats").update("Please enter a miner address.")
             return
-
         self.query_one("#miner_stats").update(f"Fetching stats for miner: {address}")
         
         try:
-            response = requests.get(f'http://37.27.198.175:8000/miningcore/minerstats')
-            data = response.json()
-            df = pd.DataFrame(data)
-            if address in list(df.miner.unique()):
-                df = df[df.miner == address]
-                df['created'] = pd.to_datetime(df['created'])
-                
-                df = df.sort_values('created', ascending=False)
-                
-                latest_timestamp = df['created'].iloc[0]
-                latest_data = df[df['created'] == latest_timestamp]
-                total_hashrate = latest_data['hashrate'].sum()
-                
-                latest_miner_stats = {
-                    'address': address,
-                    'timestamp': latest_timestamp,
-                    'total_hashrate': total_hashrate,
-                    'n_workers': len(latest_data),
-                    'workers': latest_data.worker.unique().tolist()
-                }
-                
-                # Update the dashboard and the ShareExplorerWidget
-                # self.app.update_dashboard_miner_info(latest_miner_stats)
+            response = requests.get(f'http://37.27.198.175:8000/sigscore/miners/{address}')
+            if response.status_code == 200:
+                miner_stats = response.json()
                 self.query_one("#miner_stats").update(f"Stats updated for miner: {address}")
                 
             else:
                 self.query_one("#miner_stats").update("No data found for this miner address.")
-                latest_miner_stats = None
+                miner_stats = None
                 
         except Exception as e:
             self.query_one("#miner_stats").update(f"Error fetching miner stats: {str(e)}")
-            latest_miner_stats = None
-        payment_data = self.fetch_miner_payments(address)
-        # Update the share explorer widget based on the latest miner stats
-        self.app.update_dashboard_miner_info(latest_miner_stats, payment_data)
+            miner_stats = None
+            
+        dashboard = self.app.query_one(DashboardWidget)
+        dashboard.update_miner_info(miner_stats)
+        # 9ehJZvPDgvCNNd2zTQHxnSpcCAtb1kHbEN1VAgeoRD5DPVApYkk
 
 
 class SharkPoolCyberpunkMonitor(App):
@@ -355,21 +338,15 @@ class SharkPoolCyberpunkMonitor(App):
         self.console.clear()
         self.set_interval(60, self.refresh_dashboard)
 
-    def refresh_dashboard(self):
+    def refresh_dashboard(self) -> None:
         dashboard = self.query_one(DashboardWidget)
         if dashboard:
             dashboard.refresh(layout=True)
 
-    def update_dashboard_miner_info(self, miner_stats, payment_data):
+    def update_dashboard_miner_info(self, miner_stats: dict) -> None:
         dashboard = self.query_one(DashboardWidget)
-        if dashboard and miner_stats and payment_data:
-            dashboard.miner_stats = miner_stats
-            dashboard.payment_data = payment_data
-        elif dashboard:
-            dashboard.miner_stats = {}
-            dashboard.payment_data = {}
-            
-
+        if dashboard:
+            dashboard.refresh(layout=True)
 
 if __name__ == "__main__":
     app = SharkPoolCyberpunkMonitor()
