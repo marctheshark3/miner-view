@@ -213,8 +213,8 @@ class DashboardWidget(Static):
         table.add_column("Key", style="cyan")
         table.add_column("Value", style="bold blue")
         table.add_row("Blocks Found", str(len(block_data)))
-        table.add_row("Pool Fee", "1%")
-        table.add_row("Payment Threshold", "1 ERG")
+        table.add_row("Pool Fee", "0.9%")
+        table.add_row("Payment Threshold", "0.5 ERG")
         return table
 
 class MinerInputWidget(Static):
